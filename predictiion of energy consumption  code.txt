@@ -1,0 +1,309 @@
+# read dataset
+dataset = read.csv('TetuanCity.csv')#-----Section 02-------------------------------------------
+# get data file 02_London_districts.csv and put relevant variables in a data frame
+
+
+dataset2 <- data.frame(dataset$Temperature, dataset$Humidity, dataset$Wind.Speed,dataset$general.diffuse.flows,dataset$diffuse.flows,
+                          dataset$Zone.1.Power.Consumption)
+str(dataset2)
+colnames(dataset2) <- c("Temperature", "Humidity", "Wind.Speed", "general.diffuse .flows","diffuse.flows","Zone.1.Power.Consumption")
+
+str(dataset2)
+
+#-----Section 03-------------------------------------------
+# visualise the four variables
+
+boxplot (dataset2, main = "Variable values")
+# zone1 power consumption by  temperature
+plot(Zone.1.Power.Consumption~Temperature,data=dataset2, main="Zone1 power vs Temperature",
+        xlab="Temperature", ylab="Zone.1.Power.Consumption")
+plot(Zone.1.Power.Consumption~Humidity,data=dataset2, main="Zone1 power vs Temperature",
+     xlab="Humidity", ylab="Zone.1.Power.Consumption")  
+plot(dataset2)
+library(psych)
+pairs.panels(as.data.frame(dataset3)[c("HourOfDay","Temperature", "Humidity", "Wind.Speed","general.diffuse .flows","diffuse.flows","zone.1.power.consumption","Zone2.power.consumption","Zone3.power.consumption")],
+             hist.col = "Grey", ellipses=FALSE)
+
+
+pairs.panels(as.data.frame(dataset.mm)[c("Temperature","Humidity","Wind.Speed","general.diffuse .flows","diffuse.flows")],
+            hist.col = "Grey", ellipses=FALSE)
+
+#-----Section 04-------------------------------------------
+# casewise deletion of missing cases
+library(naniar)
+# general checking for missing values
+apply(dataset2, MARGIN = 2, FUN = function(x) sum(is.na(x)))
+# casewise deletion if necessary
+dataset2 <- na.omit(dataset2)
+missing_vals = colSums(is.na(dataset))
+gg_miss_var(dataset2, show_pct = TRUE)
+
+ #-----Section 05-------------------------------------------
+# normalise data three ways and inspect
+
+# min-max scaling
+dataset.mm <- apply(dataset2, MARGIN = 2, FUN = function(x) (x - min(x))/diff(range(x)))
+
+boxplot (dataset.mm, main = "Min Max")
+
+# z-score
+dataset.z1 <- apply(dataset2, MARGIN = 2, FUN = function(x) (x - mean(x))/sd(x))
+dataset.z2 <- apply(dataset2, MARGIN = 2, FUN = function(x) (x - mean(x))/(2*sd(x)))
+
+boxplot (dataset.z1, main = "Z-score")
+boxplot (dataset.z2, main = "Z-score, 2 sd")
+
+# soft max scaling
+#library(DMwR)
+library(DMwR2)
+dataset.sm <- apply(dataset2, MARGIN = 2, FUN = function(x) (SoftMax(x,lambda = 6, mean(x), sd(x))))
+
+boxplot (dataset.sm, main = "Soft Max, lambda = 6")
+
+summary(dataset2$Temperature)
+boxplot(dataset2$Temperature)
+summary(dataset2$Humidity)
+boxplot(dataset2$Humidity)
+summary(dataset2$Wind.Speed)
+boxplot(dataset2$Wind.Speed)
+summary(dataset2$`general.diffuse .flows`)
+boxplot(dataset2$`general.diffuse .flows`)
+summary(dataset2$diffuse.flows)
+boxplot(dataset2$diffuse.flows)
+summary(dataset2$Zone.1.Power.Consumption)
+boxplot(dataset2$Zone.1.Power.Consumption)
+library(corrplot)
+r <- cor(dataset2)
+corrplot(r, method = "circle")
+dataset3 <-as.data.frame(dataset.sm)
+# Splitting the dataset into the Training set and Test set
+library(caTools)
+
+
+boxplot(dataset3.tr)
+dataset$Time <- sapply(strsplit(as.character(dataset$DateTime), " "), "[", 2)
+dataset3$HourOfDay <- sapply(dataset$Time, FUN = function(x) {strsplit(x, split = '[:]')[[1]][1]})
+summary(dataset3$HourOfDay)
+boxplot(dataset3$HourOfDay)
+plot(dataset3$HourOfDay,dataset3$Zone.1.Power.Consumption)
+#dataset splitting
+dataset3.tr <- dataset3[1:41932,]
+dataset3.te <- dataset3[41933:52416,]
+
+#linear regression checking
+
+# Linear Regression
+model1 <- lm(Zone.1.Power.Consumption ~HourOfDay+Temperature+ Humidity+ Wind.Speed+`general.diffuse .flows`+diffuse.flows, data = dataset3.tr)
+
+# Add regression line to scatter plot
+plot(dataset3.tr$Zone.1.Power.Consumption, dataset3.tr$HourOfDay, main = "Scatterplot",
+     xlab = "lower status", ylab = "transform median value")
+abline(model1, col="red")
+
+# Summarise the model
+summary(model1)
+
+# Test that residuals are normally distributed
+hist(model1$residuals, main = "Model residuals", col = "grey")
+rug(model1$residuals, side = 3)
+plot(model1$residuals ~ model1$fitted.values, xlab = "fitted values", ylab = "residuals")
+qqnorm(model1$residuals, xlab = "Theoretical Quantiles: model1 residuals" )
+qqline(model1$residuals, col = 2) ## red color
+# linear regression
+library(Metrics)
+model <- lm(Zone.1.Power.Consumption ~HourOfDay+Temperature+ Humidity+ Wind.Speed+`general.diffuse .flows`+ diffuse.flows, data = dataset3.tr)
+prediction2<-predict(model,dataset3.te)
+head(prediction2)
+View(prediction2)
+dataset3.te["prediction"]<-prediction2
+head(dataset3.te)
+MeanAbsoluteError = mae(dataset3.te$Zone.1.Power.Consumption,prediction2)
+MeanAbsoluteError
+RMSE <- function(actual, predicted) {sqrt(mean((actual - predicted)^2))}
+rootmeansquareerror= RMSE(dataset3.te$Zone.1.Power.Consumption, prediction2)
+rootmeansquareerror
+?randomforest()
+#randomforest
+findata<-dataset3
+dataset3[is.na(dataset3)] <- 0
+library(dplyr)
+X <- findata %>% select(HourOfDay,Temperature, Humidity, Wind.Speed,`general.diffuse .flows`, diffuse.flows,)
+library(caret)
+library(randomForest)
+y<-findata$Zone.1.Power.Consumption
+index <- createDataPartition(y, p=0.80, list=FALSE)
+X_train <- X[ index, ]
+X_test <- X[-index, ]
+y_train <- y[index]
+y_test<-y[-index]
+regr <- randomForest(x = X_train, y = y_train , maxnodes = 10, ntree = 10)
+predictions <- predict(regr, X_test)
+result <- X_test
+result['Zone.1.Power.Consumption'] <- y_test
+result['prediction']<- predictions
+head(result)
+m<-dataset3.te$Zone.1.Power.Consumption[1:10481]
+library(ggplot2)
+ggplot( ) +
+  geom_point( aes(x = m, y = y_test, color = 'red', alpha = 0.5) ) +
+  geom_point( aes(x = m, y = predictions, color = 'blue', alpha = 0.5)) +
+  labs(x = "Zone.1.Power.actual", y = "Zone.1.Predicted", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red"))
+
+ggplot() +
+  geom_point(aes(x = X_test$Temperature, y = y_test),
+             colour = 'red') +
+  geom_line(aes(x = X_test$Temperature, y = predictions),
+            colour = 'blue') +
+  geom_line(aes(x = X_test$Humidity, y = predictions),
+            colour = 'yellow')
+
+install.packages('Metrics')
+library(Metrics)
+MeanAbsoluteError1 = mae(y_test,predictions)
+MeanAbsoluteError1
+print(paste0('MAE: ' , mae(y_test,predictions) ))
+RMSE <- function(actual, predicted) {sqrt(mean((actual - predicted)^2))}
+rootmeansquareerror1= RMSE(y_test, predictions)
+rootmeansquareerror1
+summary(predictions)
+summary(regr)
+#decision tree
+#training a model on the data
+# regression tree using rpart
+
+library(rpart)
+set.seed(12345)
+m.rpart <- rpart(Zone.1.Power.Consumption ~ ., data =dataset3.tr)
+
+# get basic information about the tree
+m.rpart
+
+# get more detailed information about the tree
+summary(m.rpart)
+
+# use the rpart.plot package to create a visualization
+library(rpart.plot)
+
+# a basic decision tree diagram
+rpart.plot(m.rpart, digits = 5)
+
+# a few adjustments to the diagram
+rpart.plot(m.rpart, digits = 5, fallen.leaves = TRUE, type = 3, extra = 101)
+
+# alternative
+library(rattle)
+?fancyRpartPlot()
+
+fancyRpartPlot(m.rpart)
+
+#-----Section 06-------------------------------------------
+# evaluate model performance
+
+# generate predictions for the testing dataset
+p1.rpart <- predict(m.rpart, dataset3.te)
+
+# compare the distribution of predicted values vs. actual values
+summary(p1.rpart)
+summary(dataset3.te$Zone.1.Power.Consumption)
+
+boxplot(dataset3.te$Zone.1.Power.Consumption, p1.rpart, names = c("Actual", "Predicted"), main = "Energy consumptiom")
+plot(dataset3.te$Zone.1.Power.Consumption, p1.rpart, main = "Actual vs Predicted", xlab = "Actual", ylab = "Predicted")
+# compare the correlation between actual and predicted
+cor.test(dataset3.te$Zone.1.Power.Consumption, p1.rpart, method = "spearman", exact = FALSE)
+
+# function to calculate the mean absolute error
+MAE <- function(actual, predicted) {mean(abs(actual - predicted))}
+
+# mean absolute error between actual and predicted
+MAE(dataset3.te$Zone.1.Power.Consumption, p1.rpart)
+
+# mean absolute error between actual and mean of actual
+# MAE value above should be smaller if model is better than average
+MAE(mean(dataset3.tr$Zone.1.Power.Consumption), dataset3.tr$Zone.1.Power.Consumption)
+
+# function to calculate the root mean square error (RMSE)
+RMSE <- function(actual, predicted) {sqrt(mean((actual - predicted)^2))}
+
+# RMSE between actual and predicted
+RMSE(dataset3.te$Zone.1.Power.Consumption, p1.rpart)
+
+# RMSE between actual and mean of actual
+# RMSE value above should be smaller if model is better than average
+RMSE(mean(dataset3.tr$Zone.1.Power.Consumption), dataset3.te$Zone.1.Power.Consumption)
+
+# prune regression tree
+m.rpart_prune <- prune(m.rpart, cp = 0.05)
+m.rpart_prune
+summary(m.rpart_prune)
+fancyRpartPlot(m.rpart_prune)
+
+# generate predictions for the testing dataset
+p2.rpart <- predict(m.rpart_prune, dataset3.te)
+boxplot(dataset3.te$Zone.1.Power.Consumption, p2.rpart, names = c("Actual", "Predicted"), main = "Energy consumption")
+plot(dataset3.te$Zone.1.Power.Consumption, p2.rpart, main = "Actual vs Predicted", xlab = "Actual", ylab = "Predicted")
+cor.test(dataset3.te$Zone.1.Power.Consumption, p2.rpart, method = "spearman", exact = FALSE)
+MAE(dataset3.te$Zone.1.Power.Consumption, p2.rpart)
+RMSE(dataset3.te$Zone.1.Power.Consumption, p2.rpart)
+
+#-----Section 07-------------------------------------------
+# Compare with a Model Tree
+# train a M5' Model Tree
+
+library(RWeka)
+library(rJava)
+# NOTE: make sure Java and R are same 32bit or 64bit
+# if Java won't start, go to command prompt and run the command 'Java'
+?M5P()
+
+set.seed(12345)
+m.m5p <- M5P(Zone.1.Power.Consumption ~ ., data = dataset3.tr)
+
+ # display the tree
+m.m5p
+
+library(partykit)
+plot(m.m5p, main = "M5 Decision Tree")
+
+
+# get a summary of the model's performance
+summary(m.m5p)
+
+ # generate predictions for the model
+p.m5p <- predict(m.m5p, dataset3.te)
+
+# summary statistics about the predictions
+summary(p.m5p)
+summary(dataset3.te$Zone.1.Power.Consumption)
+
+boxplot(dataset3.te$Zone.1.Power.Consumption, p.m5p, names = c("Actual", "Predicted"), main = "Energy Consumption")
+plot(dataset3.te$Zone.1.Power.Consumption, p.m5p, main = "Actual vs Predicted", xlab = "Actual", ylab = "Predicted")
+
+# correlation between the actual and predicted
+cor.test(dataset3.te$Zone.1.Power.Consumption, p.m5p, method="spearman", exact = FALSE)
+
+# mean absolute error of actual and predicted
+# (uses custom function defined above)
+MAE(dataset3.te$Zone.1.Power.Consumption, p.m5p)
+
+# RMSE between actual and predicted
+# (uses custom function defined above)
+RMSE(dataset3.te$Zone.1.Power.Consumption, p.m5p)
+#svm
+library(e1071)
+regressor = svm(formula=Zone.1.Power.Consumption~HourOfDay+Temperature+Humidity+Wind.Speed+`general.diffuse .flows`+diffuse.flows,data=dataset3.tr,type='eps-regression')
+y_predict = predict(regressor,newdata = dataset3.te)
+dataset3.te$SVM_Predicted <- y_predict
+install.packages('Metrics')
+library(Metrics)
+MeanAbsoluteError3 = mae(dataset3.te$Zone.1.Power.Consumption,y_predict)
+MeanAbsoluteError3
+RMSE <- function(actual, predicted) {sqrt(mean((actual - predicted)^2))}
+rootmeansquareerror3= RMSE(dataset3.te$Zone.1.Power.Consumption,y_predict )
+rootmeansquareerror3
+summary(y_predict)
+
+summary(dataset3.te$Zone.1.Power.Consumption)
+boxplot(dataset3.te$Zone.1.Power.Consumption,y_predict, names = c("Actual", "Predicted"), main = "Energy Consumption")
+plot(dataset3.te$Zone.1.Power.Consumption, y_predict, main = "Actual vs Predicted", xlab = "Actual", ylab = "Predicted")
+summary(regressor
